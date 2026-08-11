@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+	</PropertyGroup>
+	<ItemGroup>
+	  <PackageReference Include="Spectre.Console" Version="0.57.2" />
+	  <PackageReference Include="Spectre.Console.Cli" Version="0.55.0" />
+	</ItemGroup>
+</Project>
