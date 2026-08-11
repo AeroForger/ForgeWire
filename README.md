@@ -23,3 +23,9 @@ Right now i'm planning to add:
 
 - Better pipewire support
 
+## Current version
+- Genesis
+
+## License
+Apache 2.0
+
