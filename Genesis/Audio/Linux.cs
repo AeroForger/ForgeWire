@@ -1,48 +1,53 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Threading;
 
 namespace ForgeWire.Audio;
 
 class LinuxVirtualMic
 {
-    private static Process? _virtualMicProcess = null;
+    private static Process? _virtualMicProcess;
+    private static string? _pulseModuleId;
+    private static bool _initialized;
 
     public static void SendToVirtualMic(byte[] wavBytes)
     {
         try
         {
-            // 1. Automatically spin up the virtual device if it isn't running yet
-            if (_virtualMicProcess == null || _virtualMicProcess.HasExited)
+            // Initialize the virtual microphone only once.
+            if (!_initialized)
             {
                 InitializeVirtualMic();
             }
-
-            // 2. Play the bytes using the setup virtual audio node
-            using (Process aplayProcess = new Process())
+            // Play the WAV through the virtual microphone.
+            using var aplayProcess = new Process();
+            aplayProcess.StartInfo.FileName = "aplay";
+            aplayProcess.StartInfo.Arguments = "-D Virtual_Mic";
+            aplayProcess.StartInfo.UseShellExecute = false;
+            aplayProcess.StartInfo.RedirectStandardInput = true;
+            aplayProcess.StartInfo.CreateNoWindow = true;
+            aplayProcess.Start();
+            using (BinaryWriter writer =
+                   new BinaryWriter(aplayProcess.StandardInput.BaseStream))
             {
-                aplayProcess.StartInfo.FileName = "aplay";
-                aplayProcess.StartInfo.Arguments = "-D Virtual_Mic";
-                aplayProcess.StartInfo.UseShellExecute = false;
-                aplayProcess.StartInfo.RedirectStandardInput = true;
-                aplayProcess.StartInfo.CreateNoWindow = true;
-
-                aplayProcess.Start();
-
-                using (BinaryWriter writer = new BinaryWriter(aplayProcess.StandardInput.BaseStream))
-                {
-                    writer.Write(wavBytes);
-                    writer.Flush();
-                }
-
-                aplayProcess.WaitForExit();
-                Console.WriteLine("Audio successfully streamed to virtual mic.");
+                writer.Write(wavBytes);
+                writer.Flush();
             }
+            aplayProcess.WaitForExit();
+
+            if (aplayProcess.ExitCode != 0)
+            {
+                Console.WriteLine(
+                    $"aplay failed with exit code {aplayProcess.ExitCode}.");
+                return;
+            }
+
+            Console.WriteLine("Audio successfully streamed to virtual mic.");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error sending audio to virtual mic: {ex.Message}");
+            Console.WriteLine(
+                $"Error sending audio to virtual mic: {ex.Message}");
         }
     }
 
@@ -50,47 +55,162 @@ class LinuxVirtualMic
     {
         Console.WriteLine("Initializing virtual microphone device...");
 
-        bool isPipeWire = File.Exists("/usr/bin/pw-loopback") || File.Exists("/bin/pw-loopback");
-
-        _virtualMicProcess = new Process();
-        _virtualMicProcess.StartInfo.UseShellExecute = false;
-        _virtualMicProcess.StartInfo.CreateNoWindow = true;
-
-        if (isPipeWire)
+        if (CheckIsPipeWire())
         {
-            // PipeWire Configuration
-            _virtualMicProcess.StartInfo.FileName = "pw-loopback";
-            _virtualMicProcess.StartInfo.Arguments = "-m '[ FL FR ]' --capture-props='media.class=Audio/Source node.name=Virtual_Mic node.description=\"Virtual Microphone\"'";
-            Console.WriteLine("Detected PipeWire server. Creating node: Virtual_Mic");
+            InitializePipeWire();
         }
         else
         {
-            // PulseAudio Configuration (Fallback)
-            _virtualMicProcess.StartInfo.FileName = "pactl";
-            _virtualMicProcess.StartInfo.Arguments = "load-module module-null-sink sink_name=Virtual_Mic sink_properties=device.description=\"Virtual_Microphone\"";
-            Console.WriteLine("Detected PulseAudio server. Creating node: Virtual_Mic");
+            InitializePulseAudio();
         }
 
-        _virtualMicProcess.Start();
+        _initialized = true;
 
-        // Give the OS kernel 500 milliseconds to register the new hardware mapping
-        Thread.Sleep(500); 
-        
-        // Register an exit cleanup loop to destroy the virtual mic when your program closes
-        AppDomain.CurrentDomain.ProcessExit += (sender, e) => CleanupVirtualMic();
+        AppDomain.CurrentDomain.ProcessExit +=
+            (_, _) => CleanupVirtualMic();
+    }
+
+
+
+
+    private static void InitializePipeWire()
+    {
+        Console.WriteLine(
+            "Detected PipeWire server. Creating node: Virtual_Mic");
+
+        _virtualMicProcess = new Process();
+
+        _virtualMicProcess.StartInfo.FileName = "pw-loopback";
+        _virtualMicProcess.StartInfo.Arguments =
+            "-m '[ FL FR ]' " +
+            "--capture-props=" +
+            "'media.class=Audio/Source " +
+            "node.name=Virtual_Mic " +
+            "node.description=\"Virtual Microphone\"'";
+
+        _virtualMicProcess.StartInfo.UseShellExecute = false;
+        _virtualMicProcess.StartInfo.CreateNoWindow = true;
+
+        _virtualMicProcess.Start();
+    }
+
+    private static void InitializePulseAudio()
+    {
+        Console.WriteLine(
+            "Detected PulseAudio server. Creating node: Virtual_Mic");
+
+        using var process = new Process();
+        process.StartInfo.FileName = "pactl";
+        process.StartInfo.Arguments =
+            "load-module " +
+            "module-remap-source " +
+            "master=@DEFAULT_SINK@.monitor " +
+            "source_name=Virtual_Mic " +
+            "source_properties=device.description=\"Virtual_Microphone\"";
+
+        process.StartInfo.UseShellExecute = false;
+        process.StartInfo.RedirectStandardOutput = true;
+        process.StartInfo.RedirectStandardError = true;
+        process.StartInfo.CreateNoWindow = true;
+
+        process.Start();
+
+        // pactl prints the module ID to stdout.
+        _pulseModuleId =
+            process.StandardOutput.ReadToEnd().Trim();
+
+        string error =
+            process.StandardError.ReadToEnd().Trim();
+
+        process.WaitForExit();
+
+        if (process.ExitCode != 0 || string.IsNullOrWhiteSpace(_pulseModuleId))
+        {
+            throw new Exception(
+                $"Failed to create PulseAudio virtual microphone. {error}");
+        }
+
+        Console.WriteLine(
+            $"Created PulseAudio module: {_pulseModuleId}");
     }
 
     private static void CleanupVirtualMic()
     {
-        if (_virtualMicProcess != null && !_virtualMicProcess.HasExited)
+        try
         {
-            Console.WriteLine("\nCleaning up virtual mic audio nodes...");
-            try
+            Console.WriteLine(
+                "\nCleaning up virtual microphone...");
+            // PipeWire
+            if (_virtualMicProcess != null)
             {
-                _virtualMicProcess.Kill();
+                if (!_virtualMicProcess.HasExited)
+                {
+                    _virtualMicProcess.Kill();
+                }
+
                 _virtualMicProcess.Dispose();
+                _virtualMicProcess = null;
             }
-            catch { /* Suppress exit errors */ }
+
+            // PulseAudio
+            if (!string.IsNullOrWhiteSpace(_pulseModuleId))
+            {
+                using var process = new Process();
+
+                process.StartInfo.FileName = "pactl";
+                process.StartInfo.Arguments =
+                    $"unload-module {_pulseModuleId}";
+
+                process.StartInfo.UseShellExecute = false;
+                process.StartInfo.CreateNoWindow = true;
+
+                process.Start();
+                process.WaitForExit();
+
+                _pulseModuleId = null;
+            }
+
+            _initialized = false;
+        }
+        catch
+        {
+            // Don't let cleanup errors crash the application.
+        }
+    }
+
+    private static bool CheckIsPipeWire()
+    {
+        try
+        {
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = "pactl",
+                Arguments = "info",
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var process = Process.Start(startInfo);
+
+            if (process == null)
+            {
+                return false;
+            }
+
+            string output =
+                process.StandardOutput.ReadToEnd();
+
+            process.WaitForExit();
+
+            return output.Contains(
+                "pipewire",
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            // pactl isn't available or isn't usable.
+            return false;
         }
     }
 }
