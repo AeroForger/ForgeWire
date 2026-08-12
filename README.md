@@ -1,7 +1,7 @@
 # ForgeWire
-<div style="background-color: #dedbd202; color: #ffc106; padding: 15px; border-left: 6px solid #ffc107; margin-bottom: 20px;">
-    <strong>WARNING:</strong> Early development - Currently only works on Linux with pipewire.
-</div>
+
+>[!WARNING]
+>This project is at really early stage of development and only works on linux with pipewire
 
 ## Purpose
 
