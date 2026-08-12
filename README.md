@@ -15,8 +15,6 @@ User inputs text which get converted to bytes and then bytes are sent to a Virtu
 
 Right now i'm planning to add:
 
-- Pulse audio support
-
 - TTS settings
 
 - Better pipewire support
