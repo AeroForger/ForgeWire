@@ -1,7 +1,7 @@
 # ForgeWire
 
 >[!WARNING]
->This project is at really early stage of development and only works on linux with pipewire
+>This project is at really early stage of development
 
 ## Purpose
 
@@ -14,8 +14,6 @@ User inputs text which get converted to bytes and then bytes are sent to a Virtu
 ## current state - still developing
 
 Right now i'm planning to add:
-
-- Windows support
 
 - Pulse audio support
 
