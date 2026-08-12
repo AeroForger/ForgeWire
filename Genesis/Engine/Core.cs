@@ -37,6 +37,10 @@ class Core
                     {
                         LinuxVirtualMic.SendToVirtualMic(audioData);
                     }
+                    else if (os == "Windows")
+                    {
+                        WindowsVirtualMic.SendToMic(audioData);
+                    }
                     else
                     {
                         AnsiConsole.MarkupLine("Unsupported os");
