@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "dgSpecHash": "wRwcW1GowS4=",
+  "success": true,
+  "projectFilePath": "/home/datovarzma/Projects/ForgeWire/ForgeWire/Genesis/ForgeWire.csproj",
+  "expectedPackageFiles": [
+    "/home/datovarzma/.nuget/packages/naudio/3.3.0/naudio.3.3.0.nupkg.sha512",
+    "/home/datovarzma/.nuget/packages/naudio.core/3.3.0/naudio.core.3.3.0.nupkg.sha512",
+    "/home/datovarzma/.nuget/packages/naudio.midi/3.3.0/naudio.midi.3.3.0.nupkg.sha512",
+    "/home/datovarzma/.nuget/packages/naudio.wasapi/3.3.0/naudio.wasapi.3.3.0.nupkg.sha512",
+    "/home/datovarzma/.nuget/packages/naudio.winmm/3.3.0/naudio.winmm.3.3.0.nupkg.sha512",
+    "/home/datovarzma/.nuget/packages/spectre.console/0.57.2/spectre.console.0.57.2.nupkg.sha512",
+    "/home/datovarzma/.nuget/packages/spectre.console.ansi/0.57.2/spectre.console.ansi.0.57.2.nupkg.sha512",
+    "/home/datovarzma/.nuget/packages/spectre.console.cli/0.55.0/spectre.console.cli.0.55.0.nupkg.sha512",
+    "/home/datovarzma/.nuget/packages/system.numerics.tensors/9.0.0/system.numerics.tensors.9.0.0.nupkg.sha512",
+    "/home/datovarzma/.nuget/packages/microsoft.aspnetcore.app.ref/10.0.14/microsoft.aspnetcore.app.ref.10.0.14.nupkg.sha512"
+  ],
+  "logs": []
+}

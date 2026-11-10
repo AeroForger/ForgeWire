@@ -10,6 +10,18 @@ class LinuxVirtualMic
     private static string? _pulseModuleId;
     private static bool _initialized;
 
+    /// <summary>
+    /// Creates the virtual mic nodes immediately, so apps like Discord
+    /// can see the device without having to send audio first.
+    /// </summary>
+    public static void EnsureInitialized()
+    {
+        if (!_initialized)
+        {
+            InitializeVirtualMic();
+        }
+    }
+
     public static void SendToVirtualMic(byte[] wavBytes)
     {
         try
@@ -19,30 +31,38 @@ class LinuxVirtualMic
             {
                 InitializeVirtualMic();
             }
-            // Play the WAV through the virtual microphone.
-            using var aplayProcess = new Process();
-            aplayProcess.StartInfo.FileName = "aplay";
-            aplayProcess.StartInfo.Arguments = "-D Virtual_Mic";
-            aplayProcess.StartInfo.UseShellExecute = false;
-            aplayProcess.StartInfo.RedirectStandardInput = true;
-            aplayProcess.StartInfo.CreateNoWindow = true;
-            aplayProcess.Start();
-            using (BinaryWriter writer =
-                   new BinaryWriter(aplayProcess.StandardInput.BaseStream))
-            {
-                writer.Write(wavBytes);
-                writer.Flush();
-            }
-            aplayProcess.WaitForExit();
 
-            if (aplayProcess.ExitCode != 0)
+            // pw-cat can't reliably read a WAV header from stdin, so write
+            // the WAV to a temp file and play it into the virtual sink.
+            string tempFile = Path.Combine(
+                Path.GetTempPath(), $"forgewire_{Guid.NewGuid():N}.wav");
+            try
             {
-                Console.WriteLine(
-                    $"aplay failed with exit code {aplayProcess.ExitCode}.");
-                return;
-            }
+                File.WriteAllBytes(tempFile, wavBytes);
 
-            Console.WriteLine("Audio successfully streamed to virtual mic.");
+                using var playProcess = new Process();
+                playProcess.StartInfo.FileName = "pw-cat";
+                playProcess.StartInfo.ArgumentList.Add("--playback");
+                playProcess.StartInfo.ArgumentList.Add("--target=VirtualMic");
+                playProcess.StartInfo.ArgumentList.Add(tempFile);
+                playProcess.StartInfo.UseShellExecute = false;
+                playProcess.StartInfo.CreateNoWindow = true;
+                playProcess.Start();
+                playProcess.WaitForExit();
+
+                if (playProcess.ExitCode != 0)
+                {
+                    Console.WriteLine(
+                        $"pw-cat failed with exit code {playProcess.ExitCode}.");
+                    return;
+                }
+
+                Console.WriteLine("Audio successfully streamed to virtual mic.");
+            }
+            finally
+            {
+                try { File.Delete(tempFile); } catch { /* ignore */ }
+            }
         }
         catch (Exception ex)
         {
@@ -76,17 +96,23 @@ class LinuxVirtualMic
     private static void InitializePipeWire()
     {
         Console.WriteLine(
-            "Detected PipeWire server. Creating node: Virtual_Mic");
+            "Detected PipeWire server. Creating virtual mic nodes...");
 
         _virtualMicProcess = new Process();
 
         _virtualMicProcess.StartInfo.FileName = "pw-loopback";
-        _virtualMicProcess.StartInfo.Arguments =
-            "-m '[ FL FR ]' " +
+        _virtualMicProcess.StartInfo.ArgumentList.Add("-m");
+        _virtualMicProcess.StartInfo.ArgumentList.Add("[ FL FR ]");
+        // Capture side: a virtual SINK we can play audio into.
+        _virtualMicProcess.StartInfo.ArgumentList.Add(
             "--capture-props=" +
-            "'media.class=Audio/Source " +
-            "node.name=Virtual_Mic " +
-            "node.description=\"Virtual Microphone\"'";
+            "media.class=Audio/Sink node.name=VirtualMic " +
+            "node.description=\"Virtual Microphone (input)\"");
+        // Playback side: a virtual SOURCE other apps can record from.
+        _virtualMicProcess.StartInfo.ArgumentList.Add(
+            "--playback-props=" +
+            "media.class=Audio/Source node.name=Virtual_Mic " +
+            "node.description=\"Virtual Microphone\"");
 
         _virtualMicProcess.StartInfo.UseShellExecute = false;
         _virtualMicProcess.StartInfo.CreateNoWindow = true;

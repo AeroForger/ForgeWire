@@ -19,6 +19,13 @@ class Core
     public void MainLoop()
     {
         isRunning = true;
+
+        // Create the virtual mic up-front so other apps can see it.
+        if (OperatingSystem.IsLinux())
+        {
+            LinuxVirtualMic.EnsureInitialized();
+        }
+
         while (isRunning)
         {
             string choice = menu.StartMenu();
@@ -48,7 +55,8 @@ class Core
                     break;
                 case "History":
                     var history = historyManager.Load();
-                    AnsiConsole.MarkupLine($"[bold yellow]{history}[/]");
+                    AnsiConsole.MarkupLine(
+                        $"[bold yellow]{Spectre.Console.Markup.Escape(history)}[/]");
                     AnsiConsole.MarkupLine("[bold red]Press any key to go back[/]");
                     Console.ReadKey();
                     break;
